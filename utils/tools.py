@@ -136,11 +136,11 @@ def synth_one_sample(targets, predictions, vocoder, mel_stats, model_config, pre
     src_len = targets[4][0].item()
     mel_len = targets[7][0].item()
     reduced_mel_len = mel_len // n_frames_per_step
-    mel_target = targets[6][0, :mel_len].detach().transpose(0, 1)
-    mel_prediction = predictions[1][0, :mel_len].detach().transpose(0, 1)
-    attention = predictions[3][0, :reduced_mel_len, :src_len].detach().transpose(0, 1) # [seq_len, mel_len]
-    gate_target = targets[10][0].detach()
-    gate_prediction = predictions[2][0].detach()
+    mel_target = targets[6][0, :mel_len].detach().transpose(0, 1).float()
+    mel_prediction = predictions[1][0, :mel_len].detach().transpose(0, 1).float() #.float() added now
+    attention = predictions[3][0, :reduced_mel_len, :src_len].detach().transpose(0, 1).float() # [seq_len, mel_len]
+    gate_target = targets[10][0].detach().float()
+    gate_prediction = predictions[2][0].detach().float()
 
     if normalize:
         mel_target = Audio.tools.mel_denormalize(mel_target, *mel_stats)

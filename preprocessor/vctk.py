@@ -3,7 +3,6 @@ import random
 import json
 
 import re
-import tgt
 import librosa
 import numpy as np
 from tqdm import tqdm

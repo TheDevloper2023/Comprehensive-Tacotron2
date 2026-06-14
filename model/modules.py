@@ -77,6 +77,17 @@ def b_mas(b_attn_map, in_lens, out_lens, width=1):
     return attn_out
 
 
+def binarize_attention_parallel(attn, in_lens, out_lens):
+    """For training purposes only. Binarizes attention with MAS.
+           These will no longer receive a gradient.
+        Args:
+            attn: B x 1 x max_mel_len x max_text_len
+        """
+    with torch.no_grad():
+        attn_cpu = attn.data.cpu().numpy()
+        attn_out = b_mas(attn_cpu, in_lens.cpu().numpy(), out_lens.cpu().numpy(), width=1)
+    return torch.from_numpy(attn_out).to(attn.device)
+
 
 
 class PartialConv1d(torch.nn.Conv1d):
@@ -218,17 +229,35 @@ class ConvNorm(torch.nn.Module):
             ret = self.norm(ret)
         return ret
 
-def binarize_attention_parallel(attn, in_lens, out_lens):
-    """For training purposes only. Binarizes attention with MAS.
-           These will no longer receive a gradient.
-        Args:
-            attn: B x 1 x max_mel_len x max_text_len
-        """
-    with torch.no_grad():
-        attn_cpu = attn.data.cpu().numpy()
-        attn_out = b_mas(attn_cpu, in_lens.cpu().numpy(), out_lens.cpu().numpy(), width=1)
-    return torch.from_numpy(attn_out).to(attn.device)
+class APTx(nn.Module):
+    """
+    APTx: Alpha Plus Tanh Times, an activation function that behaves like Mish,
+    but is 2x faster.
 
+    https://arxiv.org/abs/2209.06119
+    """
+
+    def __init__(self, alpha=1, beta=1, gamma=0.5, trainable=False):
+        """
+        Initialize APTx initialization.
+        :param alpha: Alpha
+        :param beta: Beta
+        :param gamma: Gamma
+        :param trainable: Makes beta and gamma trainable, dynamically optimizing the upwards slope and scaling
+        """
+        super(APTx, self).__init__()
+        self.alpha = alpha
+        if trainable:
+            self.beta = nn.Parameter(torch.tensor(beta, dtype=torch.float32))
+            self.gamma = nn.Parameter(torch.tensor(gamma, dtype=torch.float32))
+        else:
+            self.beta = beta
+            self.gamma = gamma
+
+    def forward(self, x):
+        return (self.alpha + torch.tanh(self.beta * x)) * self.gamma * x
+
+    
 class AlignmentEncoder(torch.nn.Module):
     """Module for alignment text and mel spectrogram. """
 
@@ -242,15 +271,15 @@ class AlignmentEncoder(torch.nn.Module):
 
         self.key_proj = nn.Sequential(
             ConvNorm(n_text_channels, n_text_channels * 2, kernel_size=3, bias=True, w_init_gain='relu'),
-            torch.nn.ReLU(),
+            APTx(),
             ConvNorm(n_text_channels * 2, n_att_channels, kernel_size=1, bias=True),
         )
 
         self.query_proj = nn.Sequential(
             ConvNorm(n_mel_channels, n_mel_channels * 2, kernel_size=3, bias=True, w_init_gain='relu'),
-            torch.nn.ReLU(),
+            APTx(),
             ConvNorm(n_mel_channels * 2, n_mel_channels, kernel_size=1, bias=True),
-            torch.nn.ReLU(),
+            APTx(),
             ConvNorm(n_mel_channels, n_att_channels, kernel_size=1, bias=True),
         )
 

@@ -19,8 +19,9 @@ numba_logger = logging.getLogger('numba')
 numba_logger.setLevel(logging.WARNING)
 from evaluate import evaluate
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from torch.amp import autocast, GradScaler
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def main(args, configs):
     print("Prepare training ...")
@@ -45,6 +46,11 @@ def main(args, configs):
       train_config["path"]["log_path"] = os.path.join(args.out_path, "logs")
       train_config["path"]["ckpt_path"] = os.path.join(args.out_path, "checkpoints")
       train_config["path"]["result_path"] = os.path.join(args.out_path, "val")
+    
+    use_fp16 = train_config["optimizer"]["fp16_run"] 
+    mp_dtype = torch.float16
+    grad_scaler = GradScaler(device.type, enabled=use_fp16)
+        
 
     # Prepare model
     model, optimizer = get_model(args, configs, device, train=True)
@@ -114,28 +120,33 @@ def main(args, configs):
             for batch in batchs:
                 batch = to_device(batch, device, mel_stats if normalize else None)
 
-                # Forward
-                output = model(*(batch[2:]))
+                with autocast(device.type, mp_dtype, use_fp16):
+                    # Forward
+                    output = model(*(batch[2:]))
 
-                # Cal Loss
-                losses = Loss(batch, output, epoch)
+                    # Cal Loss
+                    losses = Loss(batch, output, epoch)
+                
                 total_loss = losses[0]
 
                 # Backward
                 total_loss = total_loss / grad_acc_step
-                total_loss.backward()
+
+                grad_scaler.scale(total_loss).backward()
                 if step % grad_acc_step == 0:
                     # Clipping gradients to avoid gradient explosion
+                    grad_scaler.unscale_(optimizer._optimizer)
                     grad_norm = nn.utils.clip_grad_norm_(model.parameters(), grad_clip_thresh)
 
                     # Update weights
-                    optimizer.step_and_update_lr()
+                    grad_scaler.step(optimizer._optimizer)
+                    grad_scaler.update()
                     optimizer.zero_grad()
 
                 if step % log_step == 0:
                     losses = [l.item() for l in losses]
                     message1 = "Step {}/{}, ".format(step, total_step)
-                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Gate Loss: {:.4f}, Forward Sum Loss: {:.4f}, Guided Attention Loss: {:.4f}".format(
+                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Gate Loss: {:.4f}, Forward Sum Loss: {:.4f}".format(
                         *losses
                     )
 

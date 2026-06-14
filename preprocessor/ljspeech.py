@@ -2,7 +2,7 @@ import os
 import random
 import json
 
-import tgt
+
 import librosa
 import numpy as np
 from tqdm import tqdm
@@ -155,7 +155,7 @@ class Preprocessor:
         return out
 
     def load_audio(self, wav_path):
-        wav_raw, _ = librosa.load(wav_path, self.sampling_rate)
+        wav_raw, _ = librosa.load(wav_path, sr=self.sampling_rate)
         if len(wav_raw) < self.skip_len:
             return None
         wav = wav_raw / np.abs(wav_raw).max() * 0.999

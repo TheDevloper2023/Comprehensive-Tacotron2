@@ -11,12 +11,20 @@ hyperparameter. Some cleaners are English-specific. You'll typically want to use
   3. "basic_cleaners" if you do not want to transliterate (in this case, you should also update
      the symbols in symbols.py to match your data).
 '''
-
+import os
 import re
 from unidecode import unidecode
 from .numbers import normalize_numbers
-from phonemizer import phonemize
 import phonemizer
+
+
+if os.name == "nt":
+    from phonemizer.backend.espeak.wrapper import EspeakWrapper
+
+    EspeakWrapper.set_library(
+        r"C:\Program Files\eSpeak NG\libespeak-ng.dll"
+    )
+
 global_phonemizer = phonemizer.backend.EspeakBackend(language='en-us', preserve_punctuation=True,  with_stress=True)
 spanish_phonemizer = phonemizer.backend.EspeakBackend(language='es-419', preserve_punctuation=True,  with_stress=True)
 from .arpa import ARPAPhonemizer
