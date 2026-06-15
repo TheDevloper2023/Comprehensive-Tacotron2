@@ -257,7 +257,23 @@ class APTx(nn.Module):
     def forward(self, x):
         return (self.alpha + torch.tanh(self.beta * x)) * self.gamma * x
 
-    
+# 
+class Snake1d(nn.Module):
+    """
+    A 1-dimensional Snake activation function module.
+    """
+
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(1, hidden_dim, 1))
+
+    def forward(self, hidden_states):
+        shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(shape[0], shape[1], -1)
+        hidden_states = hidden_states + (self.alpha + 1e-9).reciprocal() * torch.sin(self.alpha * hidden_states).pow(2)
+        hidden_states = hidden_states.reshape(shape)
+        return hidden_states
+
 class AlignmentEncoder(torch.nn.Module):
     """Module for alignment text and mel spectrogram. """
 
@@ -271,15 +287,15 @@ class AlignmentEncoder(torch.nn.Module):
 
         self.key_proj = nn.Sequential(
             ConvNorm(n_text_channels, n_text_channels * 2, kernel_size=3, bias=True, w_init_gain='relu'),
-            APTx(trainable=True),
+            Snake1d(hidden_dim=n_text_channels * 2),
             ConvNorm(n_text_channels * 2, n_att_channels, kernel_size=1, bias=True),
         )
 
         self.query_proj = nn.Sequential(
             ConvNorm(n_mel_channels, n_mel_channels * 2, kernel_size=3, bias=True, w_init_gain='relu'),
-            APTx(trainable=True),
+            Snake1d(hidden_dim=n_mel_channels * 2),
             ConvNorm(n_mel_channels * 2, n_mel_channels, kernel_size=1, bias=True),
-            APTx(trainable=True),
+            Snake1d(hidden_dim=n_mel_channels),
             ConvNorm(n_mel_channels, n_att_channels, kernel_size=1, bias=True),
         )
 
