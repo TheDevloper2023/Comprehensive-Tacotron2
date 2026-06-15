@@ -271,15 +271,15 @@ class AlignmentEncoder(torch.nn.Module):
 
         self.key_proj = nn.Sequential(
             ConvNorm(n_text_channels, n_text_channels * 2, kernel_size=3, bias=True, w_init_gain='relu'),
-            APTx(),
+            APTx(trainable=True),
             ConvNorm(n_text_channels * 2, n_att_channels, kernel_size=1, bias=True),
         )
 
         self.query_proj = nn.Sequential(
             ConvNorm(n_mel_channels, n_mel_channels * 2, kernel_size=3, bias=True, w_init_gain='relu'),
-            APTx(),
+            APTx(trainable=True),
             ConvNorm(n_mel_channels * 2, n_mel_channels, kernel_size=1, bias=True),
-            APTx(),
+            APTx(trainable=True),
             ConvNorm(n_mel_channels, n_att_channels, kernel_size=1, bias=True),
         )
 
